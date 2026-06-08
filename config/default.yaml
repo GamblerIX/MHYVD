@@ -1,0 +1,22 @@
+# SRVideosAutoDownload 配置文件
+
+project_name: "SRVideosAutoDownload"
+log_level: "INFO"
+
+# 抓取器配置
+fetcher:
+  plugin: "sr.mihoyo.com"
+  base_url: "https://sr.mihoyo.com"
+  news_path: "/news?nav=news"
+
+# 分类器配置
+classifier:
+  plugin: "rule_based"
+
+# 下载器配置
+downloader:
+  plugin: "playwright"
+  output_dir: "downloads"
+  max_concurrent: 1
+  retry_count: 3
+  timeout: 60
