@@ -29,6 +29,11 @@ headless→headed fallback, time budget, interrupt handling, and resume mode.
   `DownloadResult`, `PipelineResult`, `Rule`, `SourceMetadata`).
 - `config/default.yaml` — mirrors `src/config/defaults.py`. Keep both in sync.
 - `tests/` — `unittest`, one file per module.
+- `tests/integration/` — opt-in tests that touch a real browser; run only when
+  `RUN_BROWSER_SMOKE=1` is set. Collected by the root discover but skipped
+  without that variable.
+- `.github/workflows/ci.yml` — CI: ruff lint+format, mypy, unittest, and a
+  headless-Chromium smoke test, on push to `main` and every PR (Python 3.11).
 - `bak/` — legacy plugin-based implementation, ported from. Reference only;
   do not edit or import.
 
@@ -43,7 +48,12 @@ uv sync                                        # create .venv + install deps
 uv run python -m src.main run                  # full pipeline
 uv run python -m src.main list-sources         # list Source_Keys
 uv run python -m unittest discover -s tests    # run tests
+uv run ruff check . && uv run ruff format --check .   # lint + format gate
+uv run mypy src tests                          # type check
+RUN_BROWSER_SMOKE=1 uv run python -m unittest discover -s tests/integration  # Chromium smoke
 ```
+
+`exp/` and `bak/` are reference-only and excluded from the ruff/mypy gate.
 
 The package is imported as `src` — run everything from the repo root. Runtime
 deps (`PyYAML`, `playwright`, `playwright-stealth`) and the `hypothesis` dev
