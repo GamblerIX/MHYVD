@@ -31,6 +31,8 @@ packages = ["src"]
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+# Legacy/reference code, not part of the CI quality gate (cf. bak/).
+extend-exclude = ["exp", "bak"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
@@ -38,7 +40,16 @@ select = ["E", "F", "I", "W", "UP", "B"]
 [tool.mypy]
 python_version = "3.11"
 files = ["src", "tests"]
-warn_unused_ignores = true
+# warn_unused_ignores is intentionally OFF: with ignore_missing_imports the
+# presence/absence of Playwright stubs flips whether a `# type: ignore` is
+# redundant, so flagging "unused" ignores produces false positives in CI.
 warn_redundant_casts = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
+
+# Tests inject duck-typed fakes where production code is annotated with concrete
+# browser/driver types (an intentional seam, see CLAUDE.md). Type-checking the
+# fakes against those concrete types is noise, so relax arg-type there.
+[[tool.mypy.overrides]]
+module = "tests.*"
+disable_error_code = ["arg-type"]
