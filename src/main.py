@@ -351,6 +351,15 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
         interrupted = controller.shutdown_requested
         exit_code = choose_exit_code(timed_out, interrupted)
 
+        # On timeout, report which source timed out and after how long, split
+        # into whole minutes + seconds (minutes may be 0 for sub-minute budgets).
+        if timed_out:
+            budget = config.timeout or 0
+            minutes, seconds = divmod(int(budget), 60)
+            logging.getLogger(source_key).error(
+                "Timeout for %dm%ds", minutes, seconds
+            )
+
         # A self-reported pipeline failure (all fetch modes failed, or a
         # classification failure) is a runtime failure: map it to EXIT_ERROR
         # unless a timeout/interrupt already took precedence (design Exit-Code
