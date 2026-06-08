@@ -83,12 +83,17 @@ def resolve_system_proxy() -> str | None:
     except ImportError:  # pragma: no cover - winreg missing outside Windows
         return None
 
+    # winreg exists only on Windows; on other platforms mypy cannot see its
+    # attributes. The os.name guard above already makes this branch Windows-only.
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _WINREG_INTERNET_SETTINGS) as key:
-            proxy_enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+        with winreg.OpenKey(  # type: ignore[attr-defined]
+            winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
+            _WINREG_INTERNET_SETTINGS,
+        ) as key:
+            proxy_enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")  # type: ignore[attr-defined]
             if not proxy_enabled:
                 return None
-            proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")
+            proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")  # type: ignore[attr-defined]
             if not proxy_server:
                 return None
             proxy_server = str(proxy_server).strip()
