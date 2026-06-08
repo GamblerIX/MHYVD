@@ -11,8 +11,8 @@ missing or unreadable/corrupt cache file loads as an empty cache without raising
 (Requirement 8.5), while an existing readable file is loaded as-is
 (Requirement 8.6).
 
-Logic is ported from the legacy ``bak/utils/cache.py`` implementation, trimmed
-to the fields required by the design's Cache Models section.
+Logic is ported from the original cache utility, trimmed to the fields required
+by the design's Cache Models section.
 """
 
 from __future__ import annotations

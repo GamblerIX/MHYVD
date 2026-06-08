@@ -2,8 +2,7 @@
 
 This adapter scrapes the China-server Honkai: Star Rail news listing at
 ``https://sr.mihoyo.com`` (Requirement 1.6). It ports the working logic from
-the legacy ``bak/plugins/fetcher/sr_mihoyo_com.py`` fetcher onto the new
-Source_Adapter contract:
+the original plugin-based fetcher onto the new Source_Adapter contract:
 
 * it navigates to the news page using the :class:`BrowserDriver` it is given
   (it never launches its own browser),
@@ -70,7 +69,7 @@ INITIAL_WAIT_TIMEOUT_MS = 20000
 LOAD_MORE_WAIT_MS = 1500
 
 #: JavaScript run in the page to extract ``{title, href}`` records. Ported from
-#: the legacy fetcher: prefer an explicit ``.title`` node, otherwise fall back
+#: the original fetcher: prefer an explicit ``.title`` node, otherwise fall back
 #: to the first non-empty line of the anchor's text.
 _EXTRACT_JS = r"""(selector) => {
     const elements = document.querySelectorAll(selector);

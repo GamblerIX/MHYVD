@@ -47,7 +47,7 @@ VALID_MODES = (MODE_HEADLESS, MODE_HEADED)
 DEFAULT_MODE = MODE_HEADLESS
 
 #: Chromium launch args applied in both modes. Reduces automated-browser
-#: detection in concert with playwright-stealth (ported from the legacy code).
+#: detection in concert with playwright-stealth (ported from the original code).
 DEFAULT_LAUNCH_ARGS: tuple[str, ...] = (
     "--disable-blink-features=AutomationControlled",
 )

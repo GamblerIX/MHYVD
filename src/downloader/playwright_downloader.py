@@ -30,8 +30,8 @@ injectable seams (``resolve_attempt`` and ``download_file``) so the bulk of the
 logic is exercised by tests with lightweight fakes and temp files -- no real
 browser is required.
 
-Resolution and URL-normalization logic is ported from the legacy
-``bak/plugins/downloader/playwright.py`` downloader.
+Resolution and URL-normalization logic is ported from the original plugin-based
+downloader.
 """
 
 from __future__ import annotations
@@ -48,7 +48,12 @@ from ..constants import STATUS_DOWNLOADED, STATUS_FAILED, STATUS_SKIPPED
 from ..models import DownloadResult, NewsItem
 from .base import Downloader
 from .paths import build_output_path, extract_news_id
-from .url_resolver import MEDIA_URL_RE, dedupe_media_urls, normalize_media_url
+from .url_resolver import (
+    MEDIA_EXTENSIONS,
+    MEDIA_URL_RE,
+    dedupe_media_urls,
+    normalize_media_url,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from ..browser.driver import BrowserDriver
@@ -140,6 +145,7 @@ class PlaywrightDownloader(Downloader):
         resolve_attempt: ResolveAttempt | None = None,
         file_downloader: FileDownloader | None = None,
         download_cache: DownloadCache | None = None,
+        should_stop: Callable[[], bool] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise the downloader.
@@ -159,6 +165,12 @@ class PlaywrightDownloader(Downloader):
             download_cache: Optional Download_Cache; when provided, a successful
                 download is recorded to it before the result is returned
                 (Requirement 8.4). ``None`` disables download-record caching.
+            should_stop: Optional predicate polled before starting each item and
+                before each resolution attempt. When it returns ``True`` the
+                downloader stops starting *new* work and short-circuits the
+                retry loop, so a user interrupt aborts promptly instead of
+                draining the whole queue (Requirement 12.4). Defaults to a
+                predicate that never stops.
         """
         self.output_dir = Path(output_dir)
         self.max_concurrent = max(1, int(max_concurrent))
@@ -169,6 +181,7 @@ class PlaywrightDownloader(Downloader):
         self.download_cache = download_cache
         self._resolve_attempt = resolve_attempt or self._default_resolve_attempt
         self._file_downloader = file_downloader or self._default_download_file
+        self._should_stop = should_stop or (lambda: False)
 
     # ------------------------------------------------------------------ #
     # Public contract.
@@ -220,22 +233,44 @@ class PlaywrightDownloader(Downloader):
         """
         category = item.category or ""
         news_id = extract_news_id(item.url)
+        # Provisional target with the default extension; the final extension is
+        # derived from the resolved video URL (which may be .mov etc.) below.
         target = build_output_path(self.output_dir, category, item.title, news_id)
 
         try:
-            # Resume: an existing target file is skipped (Requirement 8.2).
-            if self.resume and target.exists():
-                logger.info("Skipping already-downloaded %s", item.title)
+            # Shutdown requested before this item started any work: don't begin
+            # a new (expensive) page load. Report it as failed so the item is
+            # still accounted for (Property 20) rather than silently dropped.
+            if self._should_stop():
                 return DownloadResult(
                     title=item.title,
                     url=item.url,
                     category=category,
                     video_url="",
                     local_path=target,
-                    status=STATUS_SKIPPED,
-                    bytes_written=0,
-                    remote_size=target.stat().st_size,
+                    status=STATUS_FAILED,
+                    error="Shutdown requested before download",
                 )
+
+            # Resume: an existing target file is skipped (Requirement 8.2).
+            # Resolution determines the real extension, but in resume mode we
+            # must decide to skip *without* resolving (resolution is the
+            # expensive page load). So we look for an already-downloaded file
+            # under any recognised media extension.
+            if self.resume:
+                existing = self._find_existing_target(category, item.title, news_id)
+                if existing is not None:
+                    logger.info("Skipping already-downloaded %s", item.title)
+                    return DownloadResult(
+                        title=item.title,
+                        url=item.url,
+                        category=category,
+                        video_url="",
+                        local_path=existing,
+                        status=STATUS_SKIPPED,
+                        bytes_written=0,
+                        remote_size=existing.stat().st_size,
+                    )
 
             video_url = await self._resolve_video_url(driver, item)
 
@@ -250,6 +285,12 @@ class PlaywrightDownloader(Downloader):
                     status=STATUS_FAILED,
                     error="No video URL resolved",
                 )
+
+            # Now that the URL is known, fix the target extension to match it
+            # (e.g. .mov), so the saved file is not mislabelled .mp4.
+            target = build_output_path(
+                self.output_dir, category, item.title, news_id, video_url=video_url
+            )
 
             download_succeeded = True
             error: str | None = None
@@ -310,6 +351,27 @@ class PlaywrightDownloader(Downloader):
                 error=str(exc),
             )
 
+    def _find_existing_target(
+        self, category: str, title: str, news_id: str
+    ) -> Path | None:
+        """Return an already-downloaded target file for resume, or ``None``.
+
+        Because the extension is only known after resolution (and resume must
+        skip *without* resolving), this checks the target stem under every
+        recognised media extension and returns the first that exists.
+        """
+        for extension in MEDIA_EXTENSIONS:
+            candidate = build_output_path(
+                self.output_dir,
+                category,
+                title,
+                news_id,
+                video_url=f"x{extension}",
+            )
+            if candidate.exists():
+                return candidate
+        return None
+
     async def _resolve_video_url(
         self, driver: BrowserDriver, item: NewsItem
     ) -> str | None:
@@ -321,6 +383,10 @@ class PlaywrightDownloader(Downloader):
         immediately.
         """
         for attempt in range(self.retry_count):
+            # Stop retrying once a shutdown has been requested so an interrupt
+            # is not delayed by the remaining attempts (Requirement 12.4).
+            if self._should_stop():
+                return None
             try:
                 url = await self._resolve_attempt(driver, item)
             except Exception as exc:  # noqa: BLE001 - a failed attempt is just None

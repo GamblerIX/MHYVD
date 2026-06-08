@@ -13,6 +13,7 @@ import unittest
 
 from src.downloader.url_resolver import (
     MEDIA_EXTENSIONS,
+    MEDIA_URL_RE,
     dedupe_media_urls,
     normalize_media_url,
 )
@@ -48,6 +49,26 @@ class NormalizeMediaUrlTests(unittest.TestCase):
             with self.subTest(ext=ext):
                 url = f"https://host/clip{ext}"
                 self.assertEqual(normalize_media_url(url), url)
+
+    def test_accepts_mov_extension(self) -> None:
+        # The HSR-CN site serves PVs as .mov (e.g. fastcdn.mihoyo.com/.../x.mov);
+        # these must resolve, not be rejected at the extension gate.
+        url = "https://fastcdn.mihoyo.com/content-v2/hkrpg/163575/abc_123.mov"
+        self.assertEqual(normalize_media_url(url), url)
+
+    def test_accepts_webm_and_m4v_extensions(self) -> None:
+        for ext in (".webm", ".m4v"):
+            with self.subTest(ext=ext):
+                url = f"https://host/clip{ext}"
+                self.assertEqual(normalize_media_url(url), url)
+
+    def test_rejects_mov_snapshot_thumbnail(self) -> None:
+        # The site also serves a .mov snapshot thumbnail; it must stay rejected.
+        url = (
+            "https://fastcdn.mihoyo.com/content-v2/hkrpg/163575/abc_123.mov"
+            "?x-oss-process=video%2Fsnapshot%2Ct_0%2Cf_jpg%2Ch_600%2Cm_fast"
+        )
+        self.assertIsNone(normalize_media_url(url))
 
     def test_accepts_http_and_https(self) -> None:
         self.assertEqual(normalize_media_url("http://host/v.mkv"), "http://host/v.mkv")
@@ -134,6 +155,22 @@ class DedupeMediaUrlsTests(unittest.TestCase):
         self.assertEqual(
             dedupe_media_urls(candidates),
             ["https://host/a.mp4", "https://host/b.mp4"],
+        )
+
+
+class MediaUrlRegexTests(unittest.TestCase):
+    def test_matches_mov_in_html(self) -> None:
+        html = '<video src="https://fastcdn.mihoyo.com/x/abc_123.mov"></video>'
+        self.assertEqual(
+            MEDIA_URL_RE.findall(html),
+            ["https://fastcdn.mihoyo.com/x/abc_123.mov"],
+        )
+
+    def test_matches_webm_and_m4v_in_html(self) -> None:
+        html = "a https://h/v.webm b https://h/v.m4v c"
+        self.assertEqual(
+            MEDIA_URL_RE.findall(html),
+            ["https://h/v.webm", "https://h/v.m4v"],
         )
 
 

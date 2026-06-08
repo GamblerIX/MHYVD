@@ -23,7 +23,7 @@ concurrency: 1
 retry_count: 3
 
 # Per-operation timeout in seconds.
-timeout: 60
+timeout: 300
 
 # Classification rules. Order matters: the classifier assigns the
 # category of the first rule whose keyword appears in a title.
@@ -31,37 +31,49 @@ rules:
   - category: videos/pv/character
     keywords:
       - "角色 PV"
+      - "角色PV"
   - category: videos/pv/version
     keywords:
       - "版本 PV"
+      - "版本PV"
   - category: videos/pv/starrytour
     keywords:
       - "千星纪游 PV"
+      - "千星纪游PV"
   - category: videos/pv/goldenepic
     keywords:
       - "黄金史诗 PV"
+      - "黄金史诗PV"
   - category: videos/pv/improvtour
     keywords:
       - "即兴巡演 PV"
+      - "即兴巡演PV"
   - category: videos/pv/mythprologue
     keywords:
       - "神话开篇 PV"
+      - "神话开篇PV"
   - category: videos/pv/ancientode
     keywords:
       - "太古颂歌 PV"
+      - "太古颂歌PV"
   - category: videos/pv/collab
     keywords:
       - "联动 PV"
+      - "联动PV"
   - category: videos/pv/salvation
     keywords:
       - "救世 PV"
+      - "救世PV"
   - category: videos/pv/dreamfinale
     keywords:
       - "美梦谢幕 PV"
+      - "美梦谢幕PV"
       - "美梦预告 PV"
+      - "美梦预告PV"
   - category: videos/pv/story
     keywords:
       - "剧情 PV"
+      - "剧情PV"
   - category: videos/pv/others
     keywords:
       - "PV："

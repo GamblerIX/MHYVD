@@ -31,8 +31,8 @@ packages = ["src"]
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-# Legacy/reference code, not part of the CI quality gate (cf. bak/).
-extend-exclude = ["exp", "bak"]
+# Reference-only code, not part of the CI quality gate.
+extend-exclude = ["exp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]

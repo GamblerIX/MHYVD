@@ -1,7 +1,7 @@
 """Tests for the classification layer (``src/classifier``).
 
 Covers:
-- ``rules.DEFAULT_RULES`` shape and ordering (ported legacy rules).
+- ``rules.DEFAULT_RULES`` shape and ordering (ported original rules).
 - ``ClassifierRegistry`` name -> class registration and construction.
 - ``RuleBasedClassifier`` first-match-or-default assignment.
 - Property 11 (first-match-or-default) and Property 12 (partition with
@@ -35,8 +35,8 @@ class DefaultRulesTest(unittest.TestCase):
             self.assertIsInstance(rule.keywords, tuple)
             self.assertGreater(len(rule.keywords), 0)
 
-    def test_default_rules_preserve_legacy_priority_order(self) -> None:
-        # The first rule must be the character PV rule, matching the legacy
+    def test_default_rules_preserve_original_priority_order(self) -> None:
+        # The first rule must be the character PV rule, matching the original
         # CLASSIFICATION_RULES ordering.
         self.assertEqual(DEFAULT_RULES[0].category, "videos/pv/character")
         self.assertIn("角色 PV", DEFAULT_RULES[0].keywords)
@@ -134,7 +134,7 @@ class RuleBasedClassifierExampleTest(unittest.TestCase):
     def test_classify_empty_list_returns_empty_dict(self) -> None:
         self.assertEqual(RuleBasedClassifier().classify([]), {})
 
-    def test_default_rules_match_legacy_examples(self) -> None:
+    def test_default_rules_match_original_examples(self) -> None:
         classifier = RuleBasedClassifier()
         cases = {
             "新版本 PV 公开": "videos/pv/version",
@@ -144,6 +144,29 @@ class RuleBasedClassifierExampleTest(unittest.TestCase):
             "走近星穹铁道": "videos/approachsr",
             "音乐专辑上线音乐平台": "music",
             "版本更新说明": "activity",
+        }
+        for title, expected in cases.items():
+            with self.subTest(title=title):
+                self.assertEqual(classifier.classify_one(title), expected)
+
+    def test_real_hsr_titles_classify_to_specific_pv_categories(self) -> None:
+        """HSR-CN titles run ``版本PV`` / ``角色PV`` etc. with no space before
+        ``PV``; the rules must match that real on-site form, not just the
+        space-separated variant. Regression for the bug where every specific PV
+        fell through to ``videos/pv/others`` or the generic ``others``.
+        """
+        classifier = RuleBasedClassifier()
+        cases = {
+            "《崩坏：星穹铁道》3.7版本PV 「成为昨日的明天」": "videos/pv/version",
+            "《崩坏：星穹铁道》阿格莱雅角色PV——「致命浪漫」": "videos/pv/character",
+            "《崩坏：星穹铁道》白厄角色PV 「日冕」": "videos/pv/character",
+            "《崩坏：星穹铁道》黄金史诗PV 「再见，昔涟」": "videos/pv/goldenepic",
+            "《崩坏：星穹铁道》即兴巡演PV 「吉凶之外」": "videos/pv/improvtour",
+            "《崩坏：星穹铁道》神话开篇PV 「诸神尽喑之歌」": "videos/pv/mythprologue",
+            "《崩坏：星穹铁道》救世PV 「开拓者」": "videos/pv/salvation",
+            "《崩坏：星穹铁道》美梦谢幕PV 「致意」": "videos/pv/dreamfinale",
+            "《崩坏：星穹铁道》千星纪游PV 「飞镝追星」": "videos/pv/starrytour",
+            "《崩坏：星穹铁道》× Fate[UBW] 联动PV 「相见『很』晚」": "videos/pv/collab",
         }
         for title, expected in cases.items():
             with self.subTest(title=title):

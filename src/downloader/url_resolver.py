@@ -1,13 +1,13 @@
 """Pure helpers for media URL normalization and deduplication.
 
 These functions isolate the media-URL logic from any browser or network I/O so
-that it can be exercised directly by tests. The behavior is ported from the
-legacy ``bak/plugins/downloader/playwright.py`` downloader:
+that it can be exercised directly by tests:
 
 - ``normalize_media_url`` trims whitespace, fixes protocol-relative ``//`` URLs
-  to ``https``, requires an ``http``/``https`` scheme together with a
-  ``.mp4``/``.mkv``/``.flv`` extension, and rejects OSS ``snapshot`` thumbnail
-  URLs (those whose ``x-oss-process`` query parameter requests a snapshot).
+  to ``https``, requires an ``http``/``https`` scheme together with a recognised
+  media extension (:data:`MEDIA_EXTENSIONS`), and rejects OSS ``snapshot``
+  thumbnail URLs (those whose ``x-oss-process`` query parameter requests a
+  snapshot).
 - ``dedupe_media_urls`` performs an order-preserving deduplication over the
   normalized candidates, dropping any candidate that does not normalize to a
   valid media URL.
@@ -27,11 +27,22 @@ __all__ = [
 ]
 
 #: Recognized media file extensions (lower case, including the leading dot).
-MEDIA_EXTENSIONS: tuple[str, ...] = (".mp4", ".mkv", ".flv")
+#: ``.mov`` is required because the HSR-CN site serves PVs as ``.mov`` from
+#: ``fastcdn.mihoyo.com``; ``.webm``/``.m4v`` are common web video formats kept
+#: for forward compatibility.
+MEDIA_EXTENSIONS: tuple[str, ...] = (
+    ".mp4",
+    ".mkv",
+    ".flv",
+    ".mov",
+    ".webm",
+    ".m4v",
+)
 
 #: Regex used elsewhere to scrape candidate media URLs out of raw page HTML.
+#: Keep the alternation in sync with :data:`MEDIA_EXTENSIONS`.
 MEDIA_URL_RE = re.compile(
-    r"https?://[^\"'<>\s]+?\.(?:mp4|mkv|flv)(?:\?[^\"'<>\s]*)?",
+    r"https?://[^\"'<>\s]+?\.(?:mp4|mkv|flv|mov|webm|m4v)(?:\?[^\"'<>\s]*)?",
     re.IGNORECASE,
 )
 

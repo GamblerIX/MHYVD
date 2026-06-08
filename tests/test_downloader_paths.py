@@ -104,6 +104,37 @@ class BuildOutputPathTests(unittest.TestCase):
         result = build_output_path("downloads", "videos", "", "9")
         self.assertEqual(result.name, f"{FALLBACK_FILENAME} [9].mp4")
 
+    def test_extension_derived_from_video_url(self) -> None:
+        result = build_output_path(
+            "downloads",
+            "videos/pv",
+            "My Title",
+            "123",
+            video_url="https://fastcdn.mihoyo.com/x/abc_123.mov",
+        )
+        self.assertEqual(result.name, "My Title [123].mov")
+
+    def test_extension_ignores_query_string(self) -> None:
+        result = build_output_path(
+            "downloads",
+            "videos",
+            "Clip",
+            "7",
+            video_url="https://h/v.mp4?token=abc",
+        )
+        self.assertEqual(result.name, "Clip [7].mp4")
+
+    def test_unknown_extension_defaults_to_mp4(self) -> None:
+        # A URL with no recognised media suffix falls back to .mp4.
+        result = build_output_path(
+            "downloads", "videos", "Clip", "7", video_url="https://h/stream"
+        )
+        self.assertEqual(result.name, "Clip [7].mp4")
+
+    def test_no_video_url_defaults_to_mp4(self) -> None:
+        result = build_output_path("downloads", "videos", "Clip", "7")
+        self.assertEqual(result.name, "Clip [7].mp4")
+
 
 @unittest.skipUnless(HAS_HYPOTHESIS, "hypothesis is not installed")
 class SanitizeFilenamePropertyTests(unittest.TestCase):

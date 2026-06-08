@@ -1,7 +1,6 @@
 """Default classification rules.
 
-Ports the legacy ``CLASSIFICATION_RULES`` from
-``bak/plugins/classifier/rule_based.py`` into the new ``Rule`` model
+Ports the original ``CLASSIFICATION_RULES`` into the new ``Rule`` model
 (:class:`src.models.Rule`), which stores keywords as an immutable tuple so the
 defaults themselves are immutable.
 
@@ -17,24 +16,24 @@ from ..models import Rule
 
 __all__ = ["DEFAULT_RULES"]
 
-#: The built-in classification rules, ported from the legacy
+#: The built-in classification rules, ported from the original
 #: ``CLASSIFICATION_RULES`` list. Order is significant — earlier rules take
 #: precedence on a keyword match (Requirement 6.2, 14.1).
 DEFAULT_RULES: tuple[Rule, ...] = (
-    Rule(category="videos/pv/character", keywords=("角色 PV",)),
-    Rule(category="videos/pv/version", keywords=("版本 PV",)),
-    Rule(category="videos/pv/starrytour", keywords=("千星纪游 PV",)),
-    Rule(category="videos/pv/goldenepic", keywords=("黄金史诗 PV",)),
-    Rule(category="videos/pv/improvtour", keywords=("即兴巡演 PV",)),
-    Rule(category="videos/pv/mythprologue", keywords=("神话开篇 PV",)),
-    Rule(category="videos/pv/ancientode", keywords=("太古颂歌 PV",)),
-    Rule(category="videos/pv/collab", keywords=("联动 PV",)),
-    Rule(category="videos/pv/salvation", keywords=("救世 PV",)),
+    Rule(category="videos/pv/character", keywords=("角色 PV", "角色PV")),
+    Rule(category="videos/pv/version", keywords=("版本 PV", "版本PV")),
+    Rule(category="videos/pv/starrytour", keywords=("千星纪游 PV", "千星纪游PV")),
+    Rule(category="videos/pv/goldenepic", keywords=("黄金史诗 PV", "黄金史诗PV")),
+    Rule(category="videos/pv/improvtour", keywords=("即兴巡演 PV", "即兴巡演PV")),
+    Rule(category="videos/pv/mythprologue", keywords=("神话开篇 PV", "神话开篇PV")),
+    Rule(category="videos/pv/ancientode", keywords=("太古颂歌 PV", "太古颂歌PV")),
+    Rule(category="videos/pv/collab", keywords=("联动 PV", "联动PV")),
+    Rule(category="videos/pv/salvation", keywords=("救世 PV", "救世PV")),
     Rule(
         category="videos/pv/dreamfinale",
-        keywords=("美梦谢幕 PV", "美梦预告 PV"),
+        keywords=("美梦谢幕 PV", "美梦谢幕PV", "美梦预告 PV", "美梦预告PV"),
     ),
-    Rule(category="videos/pv/story", keywords=("剧情 PV",)),
+    Rule(category="videos/pv/story", keywords=("剧情 PV", "剧情PV")),
     Rule(category="videos/pv/others", keywords=("PV：", "PV——", "PV ：")),
     Rule(category="videos/op", keywords=("OP：", "OP——", "OP ：")),
     Rule(category="videos/ep", keywords=("EP：", "EP——", "EP ：")),

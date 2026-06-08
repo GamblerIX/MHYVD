@@ -34,8 +34,6 @@ headless→headed fallback, time budget, interrupt handling, and resume mode.
   without that variable.
 - `.github/workflows/ci.yml` — CI: ruff lint+format, mypy, unittest, and a
   headless-Chromium smoke test, on push to `main` and every PR (Python 3.11).
-- `bak/` — legacy plugin-based implementation, ported from. Reference only;
-  do not edit or import.
 
 ## Commands
 
@@ -53,7 +51,7 @@ uv run mypy src tests                          # type check
 RUN_BROWSER_SMOKE=1 uv run python -m unittest discover -s tests/integration  # Chromium smoke
 ```
 
-`exp/` and `bak/` are reference-only and excluded from the ruff/mypy gate.
+`exp/` is reference-only and excluded from the ruff/mypy gate.
 
 The package is imported as `src` — run everything from the repo root. Runtime
 deps (`PyYAML`, `playwright`, `playwright-stealth`) and the `hypothesis` dev

@@ -11,7 +11,7 @@ document):
   interrupted run keeps the URLs fetched up to that point.
 - ``urls()`` returns the cached URLs.
 - A missing or corrupt cache file loads as an **empty** cache without raising,
-  mirroring the resilience of the legacy ``bak/utils/cache.py`` loader.
+  mirroring the resilience of the original cache loader.
 
 Only serialisation lives here; the on-disk format is a UTF-8 JSON array of
 strings (``["https://...", ...]``).

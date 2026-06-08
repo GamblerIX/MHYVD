@@ -10,18 +10,23 @@ property-based tests (see Property 15 in the design document):
 - :func:`build_output_path` composes the final download target path from the
   output directory, category, sanitized title, and news id.
 
-The logic is ported from the legacy ``bak/plugins/downloader/playwright.py``
-implementation.
+The logic is ported from the original plugin-based downloader.
 """
 
 from __future__ import annotations
 
 import re
 import unicodedata
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from urllib.parse import urlparse
+
+from .url_resolver import MEDIA_EXTENSIONS
 
 #: Filename fallback used when sanitisation removes every usable character.
 FALLBACK_FILENAME = "untitled"
+
+#: Extension used when no recognised media extension can be derived.
+DEFAULT_MEDIA_EXTENSION = ".mp4"
 
 #: Characters that are illegal in filenames on common filesystems (Windows is
 #: the strictest, so we target its reserved set).
@@ -35,8 +40,10 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 __all__ = [
     "FALLBACK_FILENAME",
+    "DEFAULT_MEDIA_EXTENSION",
     "sanitize_filename",
     "extract_news_id",
+    "media_extension_for_url",
     "build_output_path",
 ]
 
@@ -84,17 +91,38 @@ def extract_news_id(url: str) -> str:
     return "unknown"
 
 
+def media_extension_for_url(video_url: str | None) -> str:
+    """Return the media file extension to use for ``video_url``.
+
+    The extension is taken from the URL path (ignoring any query string) when it
+    is one of :data:`~src.downloader.url_resolver.MEDIA_EXTENSIONS`; otherwise
+    :data:`DEFAULT_MEDIA_EXTENSION` (``.mp4``) is returned. This keeps a ``.mov``
+    download from being mislabelled ``.mp4`` while defaulting safely for URLs
+    without a recognised suffix.
+    """
+    if not video_url:
+        return DEFAULT_MEDIA_EXTENSION
+    suffix = PurePosixPath(urlparse(video_url).path).suffix.lower()
+    if suffix in MEDIA_EXTENSIONS:
+        return suffix
+    return DEFAULT_MEDIA_EXTENSION
+
+
 def build_output_path(
     output_dir: str | Path,
     category: str,
     title: str,
     news_id: str,
+    video_url: str | None = None,
 ) -> Path:
     """Compose the download target path.
 
-    The result is ``output_dir/category/"{sanitized_title} [{news_id}].mp4"``,
-    where the title is sanitised via :func:`sanitize_filename`.
+    The result is ``output_dir/category/"{sanitized_title} [{news_id}]{ext}"``,
+    where the title is sanitised via :func:`sanitize_filename` and ``ext`` is
+    derived from ``video_url`` via :func:`media_extension_for_url` (defaulting to
+    ``.mp4`` when no URL or no recognised media suffix is available).
     """
     safe_name = sanitize_filename(title)
-    filename = f"{safe_name} [{news_id}].mp4"
+    extension = media_extension_for_url(video_url)
+    filename = f"{safe_name} [{news_id}]{extension}"
     return Path(output_dir) / category / filename

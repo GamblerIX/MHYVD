@@ -173,6 +173,22 @@ class DownloadOrchestrationTests(unittest.TestCase):
         self.assertGreater(result.bytes_written, 0)
         self.assertTrue(result.local_path.exists())
 
+    def test_target_extension_follows_resolved_url(self) -> None:
+        # A .mov video must be saved as .mov, not mislabelled .mp4.
+        async def resolve(driver, item):
+            return "https://fastcdn.mihoyo.com/x/abc_123.mov"
+
+        dl = PlaywrightDownloader(
+            output_dir=self.out,
+            resolve_attempt=resolve,
+            file_downloader=self._writer(),
+        )
+        grouped = {"videos/pv": make_items("videos/pv", 1)}
+        [result] = run(dl.download(grouped, _Driver()))
+        self.assertEqual(result.status, STATUS_DOWNLOADED)
+        self.assertEqual(result.local_path.suffix, ".mov")
+        self.assertTrue(result.local_path.exists())
+
     def test_part_file_replaced_atomically(self) -> None:
         seen_states: list[bool] = []
 
@@ -294,6 +310,30 @@ class ResumeSkipTests(unittest.TestCase):
         # Skipped without even attempting resolution.
         self.assertFalse(resolved)
 
+    def test_existing_target_any_extension_is_skipped(self) -> None:
+        # A previously-downloaded .mov file must still be recognised as the
+        # target for this item even though resolution (which determines the
+        # extension) is skipped in resume mode.
+        item = NewsItem(title="Clip", url="https://sr.mihoyo.com/news/55")
+        target = self.out / "videos/pv" / "Clip [55].mov"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"already here")
+
+        resolved = False
+
+        async def resolve(driver, it):
+            nonlocal resolved
+            resolved = True
+            return "https://cdn/clip.mov"
+
+        dl = PlaywrightDownloader(
+            output_dir=self.out, resume=True, resolve_attempt=resolve
+        )
+        [result] = run(dl.download({"videos/pv": [item]}, _Driver()))
+        self.assertEqual(result.status, STATUS_SKIPPED)
+        self.assertFalse(resolved)
+        self.assertEqual(result.local_path.suffix, ".mov")
+
     def test_without_resume_existing_file_not_skipped(self) -> None:
         item = NewsItem(title="Clip", url="https://sr.mihoyo.com/news/55")
         target = self.out / "videos/pv" / "Clip [55].mp4"
@@ -314,6 +354,72 @@ class ResumeSkipTests(unittest.TestCase):
         )
         [result] = run(dl.download({"videos/pv": [item]}, _Driver()))
         self.assertEqual(result.status, STATUS_DOWNLOADED)
+
+
+# --------------------------------------------------------------------------- #
+# Shutdown awareness (Bug A: prompt interrupt).
+# --------------------------------------------------------------------------- #
+class ShutdownAwarenessTests(unittest.TestCase):
+    def test_no_new_items_resolved_once_shutdown_requested(self) -> None:
+        # With concurrency 1 the items run serially; once shutdown is requested
+        # after the first resolves, no further item should be resolved.
+        stop = False
+        resolved_urls: list[str] = []
+
+        def should_stop() -> bool:
+            return stop
+
+        async def resolve(driver, item):
+            nonlocal stop
+            resolved_urls.append(item.url)
+            stop = True  # request shutdown after the first resolution
+            return "https://cdn/clip.mp4"
+
+        async def writer(video_url: str, target: Path) -> dict:
+            return {"bytes_written": 4, "remote_size": 4}
+
+        dl = PlaywrightDownloader(
+            output_dir="unused",
+            max_concurrent=1,
+            resolve_attempt=resolve,
+            file_downloader=writer,
+            should_stop=should_stop,
+        )
+        grouped = {"videos/pv": make_items("videos/pv", 5)}
+        results = run(dl.download(grouped, _Driver()))
+        # Only the first item is resolved; the rest short-circuit.
+        self.assertEqual(len(resolved_urls), 1)
+        # Every item still yields exactly one result (Property 20 preserved).
+        self.assertEqual(len(results), 5)
+        statuses = [r.status for r in results]
+        self.assertEqual(statuses.count(STATUS_DOWNLOADED), 1)
+        # The skipped-for-shutdown items are reported as failed, not dropped.
+        self.assertEqual(statuses.count(STATUS_FAILED), 4)
+
+    def test_retry_loop_stops_on_shutdown(self) -> None:
+        attempts = 0
+        stop = False
+
+        def should_stop() -> bool:
+            return stop
+
+        async def fail_then_request_stop(driver, item):
+            nonlocal attempts, stop
+            attempts += 1
+            stop = True  # request shutdown during the first attempt
+            return None
+
+        dl = PlaywrightDownloader(
+            output_dir="unused",
+            retry_count=5,
+            resolve_attempt=fail_then_request_stop,
+            should_stop=should_stop,
+        )
+        grouped = {"videos/pv": make_items("videos/pv", 1)}
+        [result] = run(dl.download(grouped, _Driver()))
+        # Retry budget is 5, but shutdown stops further attempts after the first.
+        self.assertEqual(attempts, 1)
+        self.assertEqual(result.status, STATUS_FAILED)
 
 
 # --------------------------------------------------------------------------- #

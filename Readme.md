@@ -47,6 +47,7 @@ uv run mhyvd run
 | `-c, --config PATH` | YAML 配置文件路径（默认使用内置的 `config/default.yaml`）。 |
 | `-s, --source KEY` | 要运行的数据源 Key（例如 `honkai-star-rail/cn`）。会覆盖配置文件中的设置。 |
 | `-p, --proxy ADDR` | 代理服务器地址。会覆盖配置文件中的设置。 |
+| `-o, --timeout SECONDS` | 整体时间预算 / 单次操作超时时长（秒）。会覆盖配置文件中的 `timeout` 设置。 |
 | `--headless` / `--headed` | 浏览器运行模式（互斥参数；默认为无头 headless 模式）。 |
 | `-l, --limit N` | 限制处理的视频数量（用于测试）。 |
 | `--log-level` | 日志级别：`DEBUG` / `INFO` / `WARNING` / `ERROR`（默认为 `INFO`）。 |
@@ -55,8 +56,8 @@ uv run mhyvd run
 | `--no-fallback` | 禁用“无头 → 有头”的自动回退机制。 |
 
 ```bash
-# 示例：在有头模式下运行、启用断点续传、限制最多下载 5 个视频，并通过代理服务器访问
-uv run python -m src.main run --headed --resume --limit 5 --proxy http://127.0.0.1:7890
+# 示例：在有头模式下运行、启用断点续传、限制最多下载 5 个视频、设置 300 秒超时，并通过代理服务器访问
+uv run python -m src.main run --headed --resume --limit 5 --timeout 300 --proxy http://127.0.0.1:10808
 
 ```
 
@@ -70,7 +71,7 @@ classifier: rule_based
 output_dir: downloads
 concurrency: 1
 retry_count: 3        # 设为 0 将禁用自动恢复（并记录警告日志）
-timeout: 60           # 单次操作的超时时间（秒）；同时也是全局时间预算
+timeout: 300          # 单次操作的超时时间（秒）；同时也是全局时间预算
 rules:
   - category: videos/pv/character
     keywords: ["角色 PV"]

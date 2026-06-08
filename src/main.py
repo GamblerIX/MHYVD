@@ -10,8 +10,8 @@ budget with interrupt handling.
 Subcommands
 -----------
 * ``run`` -- execute the full pipeline (Requirement 10.2). Options:
-  ``--config/-c``, ``--source/-s``, ``--proxy/-p``, a mutually exclusive
-  ``--headless`` / ``--headed`` group, ``--limit/-l``, ``--log-level``,
+  ``--config/-c``, ``--source/-s``, ``--proxy/-p``, ``--timeout/-o``, a mutually
+  exclusive ``--headless`` / ``--headed`` group, ``--limit/-l``, ``--log-level``,
   ``--log-file``, ``--resume``, and ``--no-fallback``
   (Requirements 10.3-10.10).
 * ``list-sources`` -- print every registered Source_Key (Requirement 10.11).
@@ -138,6 +138,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "-p", "--proxy", default=None, help="proxy server address (overrides config)"
+    )
+    run_parser.add_argument(
+        "-o",
+        "--timeout",
+        type=float,
+        default=None,
+        help="overall time-budget / per-operation timeout in seconds "
+        "(overrides config)",
     )
 
     mode_group = run_parser.add_mutually_exclusive_group()
@@ -308,6 +316,7 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
         proxy = args.proxy or resolve_proxy()
         mode = _resolve_mode(args)
         fallback_enabled = not args.no_fallback
+        timeout = args.timeout if args.timeout is not None else config.timeout
 
         # --- Zero-retry warning (Requirements 14.6, 14.7). ---
         if config.retry_count == 0:
@@ -322,7 +331,18 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
 
         adapter = _LimitedAdapter(adapter, args.limit)
         classifier = _build_classifier(config)
-        downloader = _build_downloader(config, proxy, args.resume)
+
+        # Create the shutdown controller before the downloader so the downloader
+        # can poll it and stop starting new work promptly on interrupt (Bug A /
+        # Requirement 12.4).
+        controller = ShutdownController()
+        downloader = _build_downloader(
+            config,
+            proxy,
+            args.resume,
+            timeout,
+            should_stop=lambda: controller.shutdown_requested,
+        )
 
         pipeline = pipeline_factory(
             adapter=adapter,
@@ -330,20 +350,17 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
             downloader=downloader,
             mode=mode,
             proxy=proxy,
-            timeout=config.timeout,
+            timeout=timeout,
             fallback_enabled=fallback_enabled,
             resume=args.resume,
         )
 
         # --- Drive the pipeline under the overall time budget + interrupt. ---
         _silence_proactor_shutdown_noise()
-        controller = ShutdownController()
         controller.install()
         try:
             result, timed_out = asyncio.run(
-                run_with_time_budget(
-                    pipeline.run(), config.timeout, controller=controller
-                )
+                run_with_time_budget(pipeline.run(), timeout, controller=controller)
             )
         finally:
             controller.uninstall()
@@ -354,11 +371,9 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
         # On timeout, report which source timed out and after how long, split
         # into whole minutes + seconds (minutes may be 0 for sub-minute budgets).
         if timed_out:
-            budget = config.timeout or 0
+            budget = timeout or 0
             minutes, seconds = divmod(int(budget), 60)
-            logging.getLogger(source_key).error(
-                "Timeout for %dm%ds", minutes, seconds
-            )
+            logging.getLogger(source_key).error("Timeout for %dm%ds", minutes, seconds)
 
         # A self-reported pipeline failure (all fetch modes failed, or a
         # classification failure) is a runtime failure: map it to EXIT_ERROR
@@ -440,12 +455,25 @@ def _build_classifier(config: Config) -> Any:
     return classifier_registry.create(config.classifier, rules=rules)
 
 
-def _build_downloader(config: Config, proxy: str | None, resume: bool) -> Any:
+def _build_downloader(
+    config: Config,
+    proxy: str | None,
+    resume: bool,
+    timeout: float,
+    *,
+    should_stop: Callable[[], bool] | None = None,
+) -> Any:
     """Construct the default downloader with Config concurrency/retry/timeout.
+
+    ``timeout`` is the effective per-operation timeout in seconds (the CLI
+    ``--timeout`` override when given, else ``config.timeout``).
 
     Under Resume_Mode a :class:`~src.cache.download_cache.DownloadCache` under
     the output directory is supplied so each successful download is recorded
     (Requirement 8.4); otherwise no download cache is wired.
+
+    ``should_stop`` is forwarded to the downloader so it can stop starting new
+    work promptly when a shutdown is requested (Requirement 12.4).
     """
     downloader_registry = get_downloader_registry()
 
@@ -461,10 +489,11 @@ def _build_downloader(config: Config, proxy: str | None, resume: bool) -> Any:
         output_dir=config.output_dir,
         max_concurrent=config.concurrency,
         retry_count=config.retry_count,
-        timeout=config.timeout,
+        timeout=timeout,
         proxy=proxy,
         resume=resume,
         download_cache=download_cache,
+        should_stop=should_stop,
     )
 
 

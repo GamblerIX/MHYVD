@@ -25,7 +25,7 @@ import os
 from collections.abc import Callable, Mapping
 
 # Environment variable names consulted for a proxy server, in precedence order.
-# HTTPS is preferred over HTTP (matching the legacy behaviour), with ALL_PROXY
+# HTTPS is preferred over HTTP (matching the original behaviour), with ALL_PROXY
 # as a final environment-level fallback. For each name the upper-case spelling
 # is checked before the conventional lower-case spelling.
 ENV_PROXY_VARS: tuple[str, ...] = ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY")

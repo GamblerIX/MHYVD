@@ -7,7 +7,7 @@ configuration file omits it (Requirement 9.5, Property 24).
 
 The classification ``rules`` are expressed as plain mappings
 (``{"category": ..., "keywords": [...]}``) so they round-trip cleanly through
-YAML. They are ported from the legacy ``CLASSIFICATION_RULES`` and consumed by
+YAML. They are ported from the original ``CLASSIFICATION_RULES`` and consumed by
 the classifier layer, which converts them into :class:`~src.models.Rule`
 objects.
 
@@ -20,24 +20,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-#: The default classification rules, ported from the legacy
+#: The default classification rules, ported from the original
 #: ``CLASSIFICATION_RULES``. Order matters: the classifier assigns the category
 #: of the first rule whose keyword appears in a title.
 DEFAULT_RULES: list[dict[str, Any]] = [
-    {"category": "videos/pv/character", "keywords": ["角色 PV"]},
-    {"category": "videos/pv/version", "keywords": ["版本 PV"]},
-    {"category": "videos/pv/starrytour", "keywords": ["千星纪游 PV"]},
-    {"category": "videos/pv/goldenepic", "keywords": ["黄金史诗 PV"]},
-    {"category": "videos/pv/improvtour", "keywords": ["即兴巡演 PV"]},
-    {"category": "videos/pv/mythprologue", "keywords": ["神话开篇 PV"]},
-    {"category": "videos/pv/ancientode", "keywords": ["太古颂歌 PV"]},
-    {"category": "videos/pv/collab", "keywords": ["联动 PV"]},
-    {"category": "videos/pv/salvation", "keywords": ["救世 PV"]},
+    {"category": "videos/pv/character", "keywords": ["角色 PV", "角色PV"]},
+    {"category": "videos/pv/version", "keywords": ["版本 PV", "版本PV"]},
+    {"category": "videos/pv/starrytour", "keywords": ["千星纪游 PV", "千星纪游PV"]},
+    {"category": "videos/pv/goldenepic", "keywords": ["黄金史诗 PV", "黄金史诗PV"]},
+    {"category": "videos/pv/improvtour", "keywords": ["即兴巡演 PV", "即兴巡演PV"]},
+    {"category": "videos/pv/mythprologue", "keywords": ["神话开篇 PV", "神话开篇PV"]},
+    {"category": "videos/pv/ancientode", "keywords": ["太古颂歌 PV", "太古颂歌PV"]},
+    {"category": "videos/pv/collab", "keywords": ["联动 PV", "联动PV"]},
+    {"category": "videos/pv/salvation", "keywords": ["救世 PV", "救世PV"]},
     {
         "category": "videos/pv/dreamfinale",
-        "keywords": ["美梦谢幕 PV", "美梦预告 PV"],
+        "keywords": ["美梦谢幕 PV", "美梦谢幕PV", "美梦预告 PV", "美梦预告PV"],
     },
-    {"category": "videos/pv/story", "keywords": ["剧情 PV"]},
+    {"category": "videos/pv/story", "keywords": ["剧情 PV", "剧情PV"]},
     {"category": "videos/pv/others", "keywords": ["PV：", "PV——", "PV ："]},
     {"category": "videos/op", "keywords": ["OP：", "OP——", "OP ："]},
     {"category": "videos/ep", "keywords": ["EP：", "EP——", "EP ："]},
