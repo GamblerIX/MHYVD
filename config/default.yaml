@@ -1,11 +1,4 @@
 # MHYVD default configuration.
-#
-# This file mirrors the built-in defaults in ``src/config/defaults.py``
-# (DEFAULT_CONFIG and DEFAULT_RULES). It is the file loaded by
-# ``Config`` when no explicit configuration path is supplied
-# (Requirement 9.2). User-supplied configuration is merged over these
-# values, so every required value (Requirement 9.5) has a sensible
-# fallback here.
 
 # The selected Source_Key.
 source_key: honkai-star-rail/cn
