@@ -17,6 +17,8 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
+          # Distinct suffix per job so parallel jobs don't race on one cache key.
+          cache-suffix: lint
       - run: uv sync --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
@@ -28,6 +30,7 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
+          cache-suffix: typecheck
       - run: uv sync --dev
       - run: uv run mypy src tests
 
@@ -38,6 +41,7 @@ jobs:
       - uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
+          cache-suffix: test
       - run: uv sync --dev
       - run: uv run playwright install --with-deps chromium
       # Root suite: the smoke test is collected here too but stays skipped
