@@ -490,5 +490,61 @@ class PropertyTests(unittest.TestCase):
         self.assertEqual(should_run_downstream(count), count > 0)
 
 
+# --------------------------------------------------------------------------- #
+# Video-list export.
+# --------------------------------------------------------------------------- #
+class ListExportTests(unittest.TestCase):
+    def _pipeline(self, adapter, *, path, exporter):
+        pipeline = make_pipeline(adapter)
+        pipeline.list_export_path = path  # type: ignore[attr-defined]
+        pipeline._list_exporter = exporter  # type: ignore[attr-defined]
+        return pipeline
+
+    def test_export_called_after_classify_with_grouped(self) -> None:
+        captured: dict = {}
+
+        def exporter(grouped, path):
+            captured["grouped"] = grouped
+            captured["path"] = path
+
+        adapter = FakeAdapter([make_items(2)])
+        pipeline = self._pipeline(adapter, path="cache.json", exporter=exporter)
+        result = run(pipeline.run())
+
+        self.assertEqual(captured["path"], "cache.json")
+        # Grouped is the classifier output (FakeClassifier groups under videos/pv).
+        self.assertIn("videos/pv", captured["grouped"])
+        self.assertEqual(result.news_count, 2)
+
+    def test_no_export_when_path_unset(self) -> None:
+        calls = []
+        adapter = FakeAdapter([make_items(1)])
+        pipeline = self._pipeline(
+            adapter, path=None, exporter=lambda g, p: calls.append(p)
+        )
+        run(pipeline.run())
+        self.assertEqual(calls, [])
+
+    def test_export_failure_is_swallowed(self) -> None:
+        def exporter(grouped, path):
+            raise OSError("disk full")
+
+        adapter = FakeAdapter([make_items(1)])
+        pipeline = self._pipeline(adapter, path="cache.json", exporter=exporter)
+        # The run must still complete despite the export raising.
+        result = run(pipeline.run())
+        self.assertTrue(result.completed)
+        self.assertIsNone(result.error)
+
+    def test_no_export_when_fetch_fails(self) -> None:
+        calls = []
+        adapter = FakeAdapter([[]])  # zero items -> fetch failure, no classify
+        pipeline = self._pipeline(
+            adapter, path="cache.json", exporter=lambda g, p: calls.append(p)
+        )
+        run(pipeline.run())
+        self.assertEqual(calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

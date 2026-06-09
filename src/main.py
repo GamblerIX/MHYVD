@@ -70,6 +70,10 @@ FETCH_CACHE_RELATIVE_PATH = (".cache", "fetch_cache.json")
 #: Cache file (relative to the output directory) backing Download_Cache records.
 DOWNLOAD_CACHE_RELATIVE_PATH = (".cache", "download_cache.json")
 
+#: Video-list export file (relative to the output directory). Written after the
+#: Classify_Stage on every run: all fetched News_Items plus the videos/* subset.
+LIST_EXPORT_RELATIVE_PATH = ("cache.json",)
+
 #: Factory that builds the object whose ``run()`` coroutine the CLI awaits.
 #: Injectable so tests can drive ``main`` without launching a real browser.
 PipelineFactory = Callable[..., Any]
@@ -344,6 +348,8 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
             should_stop=lambda: controller.shutdown_requested,
         )
 
+        list_export_path = config.output_dir.joinpath(*LIST_EXPORT_RELATIVE_PATH)
+
         pipeline = pipeline_factory(
             adapter=adapter,
             classifier=classifier,
@@ -353,6 +359,7 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
             timeout=timeout,
             fallback_enabled=fallback_enabled,
             resume=args.resume,
+            list_export_path=list_export_path,
         )
 
         # --- Drive the pipeline under the overall time budget + interrupt. ---

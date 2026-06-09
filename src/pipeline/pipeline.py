@@ -54,6 +54,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..browser.driver import (
@@ -91,6 +92,11 @@ DriverFactory = Callable[[str], BrowserDriver]
 #: identifier is downgraded to "no crash details" (Requirement 12.1).
 CrashIdentifier = Callable[[BrowserDriver, BaseException], "tuple[bool, str | None]"]
 
+#: Writes the classified News_Items to a path as a video-list export. Injectable
+#: so tests can capture the call without touching disk. Defaults to
+#: :func:`src.cache.list_export.export_video_list`.
+ListExporter = Callable[["dict[str, list[NewsItem]]", Path], None]
+
 
 def should_run_downstream(reported_count: int) -> bool:
     """Return whether the Classify/Download stages should run (Property 10).
@@ -102,6 +108,13 @@ def should_run_downstream(reported_count: int) -> bool:
     (Requirement 5.4).
     """
     return reported_count > 0
+
+
+def _default_list_exporter(grouped: dict[str, list[NewsItem]], path: Path) -> None:
+    """Default video-list export writer (delegates to the cache module)."""
+    from ..cache.list_export import export_video_list
+
+    export_video_list(grouped, path)
 
 
 def _default_crash_identifier(
@@ -157,8 +170,10 @@ class Pipeline:
         timeout: float = DEFAULT_TIMEOUT,
         fallback_enabled: bool = True,
         resume: bool = False,
+        list_export_path: str | Path | None = None,
         driver_factory: DriverFactory | None = None,
         crash_identifier: CrashIdentifier | None = None,
+        list_exporter: ListExporter | None = None,
     ) -> None:
         """Wire the pipeline's collaborators and browser configuration.
 
@@ -175,8 +190,12 @@ class Pipeline:
                 after a Headless_Mode failure (Requirement 4.2/4.3).
             resume: Resume_Mode flag (informational at the pipeline level; the
                 adapter and downloader own the caching behaviour).
+            list_export_path: When set, the classified News_Items are exported
+                to this path (JSON) after the Classify_Stage and before the
+                Download_Stage. ``None`` disables the export.
             driver_factory: Override the per-mode driver builder (testing).
             crash_identifier: Override the crash-identification step (testing).
+            list_exporter: Override the video-list export writer (testing).
         """
         self.adapter = adapter
         self.classifier = classifier
@@ -186,8 +205,10 @@ class Pipeline:
         self.timeout = timeout
         self.fallback_enabled = fallback_enabled
         self.resume = resume
+        self.list_export_path = Path(list_export_path) if list_export_path else None
         self._driver_factory = driver_factory or self._default_driver_factory
         self._crash_identifier = crash_identifier or _default_crash_identifier
+        self._list_exporter = list_exporter or _default_list_exporter
 
     # ------------------------------------------------------------------ #
     # Public contract.
@@ -346,6 +367,11 @@ class Pipeline:
             len(categories),
         )
 
+        # Export the classified News_Items (all fetched + videos/* only) after
+        # classification, before downloading. Best-effort: a write failure is
+        # logged and swallowed so it never masks the pipeline's outcome.
+        self._export_list(grouped)
+
         # Download_Stage (Requirement 7); the downloader handles videos/* only.
         assert attempt.driver is not None  # winning attempts keep their driver
         results = await self.downloader.download(grouped, attempt.driver)
@@ -361,6 +387,22 @@ class Pipeline:
     # ------------------------------------------------------------------ #
     # Helpers.
     # ------------------------------------------------------------------ #
+    def _export_list(self, grouped: dict[str, list[NewsItem]]) -> None:
+        """Write the video-list export when configured, never raising.
+
+        Does nothing when ``list_export_path`` is unset. A write failure is
+        logged and swallowed so the export is best-effort and cannot mask the
+        pipeline's actual outcome.
+        """
+        if self.list_export_path is None:
+            return
+        try:
+            self._list_exporter(grouped, self.list_export_path)
+        except Exception as exc:  # noqa: BLE001 - export is best-effort
+            logger.warning(
+                "Failed to export video list to %s: %s", self.list_export_path, exc
+            )
+
     def _count_news(self, items: list[NewsItem]) -> int:
         """Return the *reported* fetch count for ``items`` (Property 9).
 
