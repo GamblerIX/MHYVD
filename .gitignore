@@ -215,3 +215,4 @@ logs/
 downloads/.cache/
 .kiro/
 uv.lock
+/docs/superpowers/
