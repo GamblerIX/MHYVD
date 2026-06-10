@@ -34,6 +34,9 @@ headless→headed fallback, time budget, interrupt handling, and resume mode.
   without that variable.
 - `.github/workflows/ci.yml` — CI: ruff lint+format, mypy, unittest, and a
   headless-Chromium smoke test, on push to `main` and every PR (Python 3.11).
+- `.github/workflows/scrape-list.yml` — daily scheduled scrape: runs
+  `run --list-only` (needs ≥5 min budget; uses `--timeout 600`) and publishes
+  `url-list.json` to the rolling `url-list` GitHub release via `gh`.
 
 ## Commands
 
