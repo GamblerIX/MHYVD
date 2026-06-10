@@ -197,6 +197,38 @@ class RunCompletionTests(TmpDirTestCase):
 
 
 # --------------------------------------------------------------------------- #
+# run: --list-only (fetch + classify + export, no download).
+# --------------------------------------------------------------------------- #
+class ListOnlyTests(TmpDirTestCase):
+    def test_list_only_disables_download(self) -> None:
+        config = _write_config(self.tmp_path)
+        factory = make_factory(completed_result())
+        code, _, _ = self.run_main(
+            [
+                "run",
+                "-c",
+                str(config),
+                "--list-only",
+                "--log-file",
+                str(self.log_file),
+            ],
+            pipeline_factory=factory,
+        )
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertFalse(factory.captured["download_enabled"])  # type: ignore[attr-defined]
+
+    def test_download_enabled_by_default(self) -> None:
+        config = _write_config(self.tmp_path)
+        factory = make_factory(completed_result())
+        code, _, _ = self.run_main(
+            ["run", "-c", str(config), "--log-file", str(self.log_file)],
+            pipeline_factory=factory,
+        )
+        self.assertEqual(code, EXIT_SUCCESS)
+        self.assertTrue(factory.captured["download_enabled"])  # type: ignore[attr-defined]
+
+
+# --------------------------------------------------------------------------- #
 # run: configuration failures (Requirements 12.5).
 # --------------------------------------------------------------------------- #
 class RunConfigErrorTests(TmpDirTestCase):

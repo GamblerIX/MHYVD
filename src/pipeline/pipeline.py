@@ -170,6 +170,7 @@ class Pipeline:
         timeout: float = DEFAULT_TIMEOUT,
         fallback_enabled: bool = True,
         resume: bool = False,
+        download_enabled: bool = True,
         list_export_path: str | Path | None = None,
         driver_factory: DriverFactory | None = None,
         crash_identifier: CrashIdentifier | None = None,
@@ -190,6 +191,9 @@ class Pipeline:
                 after a Headless_Mode failure (Requirement 4.2/4.3).
             resume: Resume_Mode flag (informational at the pipeline level; the
                 adapter and downloader own the caching behaviour).
+            download_enabled: When ``False`` the Download_Stage is skipped
+                entirely (list-only run): the pipeline fetches, classifies and
+                exports, then completes with no ``download_results``.
             list_export_path: When set, the classified News_Items are exported
                 to this path (JSON) after the Classify_Stage and before the
                 Download_Stage. ``None`` disables the export.
@@ -205,6 +209,7 @@ class Pipeline:
         self.timeout = timeout
         self.fallback_enabled = fallback_enabled
         self.resume = resume
+        self.download_enabled = download_enabled
         self.list_export_path = Path(list_export_path) if list_export_path else None
         self._driver_factory = driver_factory or self._default_driver_factory
         self._crash_identifier = crash_identifier or _default_crash_identifier
@@ -371,6 +376,17 @@ class Pipeline:
         # classification, before downloading. Best-effort: a write failure is
         # logged and swallowed so it never masks the pipeline's outcome.
         self._export_list(grouped)
+
+        # List-only run: stop after classify + export, skip the Download_Stage.
+        if not self.download_enabled:
+            logger.info("Download stage disabled (list-only run); skipping")
+            return PipelineResult(
+                news_count=reported_count,
+                classified_categories=categories,
+                download_results=(),
+                completed=True,
+                error=None,
+            )
 
         # Download_Stage (Requirement 7); the downloader handles videos/* only.
         assert attempt.driver is not None  # winning attempts keep their driver

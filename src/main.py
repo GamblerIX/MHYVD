@@ -186,6 +186,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--resume", action="store_true", help="enable Resume_Mode (skip cached work)"
     )
     run_parser.add_argument(
+        "--list-only",
+        action="store_true",
+        help="fetch, classify and export the URL list without downloading videos",
+    )
+    run_parser.add_argument(
         "--no-fallback",
         action="store_true",
         help="disable the headless->headed fallback",
@@ -359,6 +364,7 @@ def _cmd_run(args: argparse.Namespace, *, pipeline_factory: PipelineFactory) -> 
             timeout=timeout,
             fallback_enabled=fallback_enabled,
             resume=args.resume,
+            download_enabled=not args.list_only,
             list_export_path=list_export_path,
         )
 

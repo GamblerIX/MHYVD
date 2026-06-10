@@ -159,6 +159,7 @@ def make_pipeline(
     *,
     mode: str = MODE_HEADLESS,
     fallback_enabled: bool = True,
+    download_enabled: bool = True,
     crash_identifier=None,
     drivers: list[FakeDriver] | None = None,
 ):
@@ -181,6 +182,7 @@ def make_pipeline(
         downloader,
         mode=mode,
         fallback_enabled=fallback_enabled,
+        download_enabled=download_enabled,
         driver_factory=factory,
         crash_identifier=crash_identifier,
     )
@@ -544,6 +546,50 @@ class ListExportTests(unittest.TestCase):
         )
         run(pipeline.run())
         self.assertEqual(calls, [])
+
+
+class DownloadDisabledTests(unittest.TestCase):
+    """``download_enabled=False``: list-only runs skip the Download_Stage."""
+
+    def test_download_stage_skipped(self) -> None:
+        adapter = FakeAdapter([make_items(3)])
+        downloader = FakeDownloader()
+        pipeline = make_pipeline(adapter, downloader=downloader, download_enabled=False)
+
+        result = run(pipeline.run())
+
+        self.assertTrue(result.completed)
+        self.assertIsNone(result.error)
+        self.assertEqual(result.news_count, 3)
+        self.assertEqual(result.classified_categories, {"videos/pv": 3})
+        self.assertEqual(result.download_results, ())
+        self.assertFalse(downloader.called)
+
+    def test_export_still_runs_without_download(self) -> None:
+        captured: dict = {}
+        adapter = FakeAdapter([make_items(2)])
+        pipeline = make_pipeline(adapter, download_enabled=False)
+        pipeline.list_export_path = "cache.json"  # type: ignore[attr-defined]
+        pipeline._list_exporter = lambda g, p: captured.update(  # type: ignore[attr-defined]
+            grouped=g, path=p
+        )
+
+        result = run(pipeline.run())
+
+        self.assertEqual(captured["path"], "cache.json")
+        self.assertIn("videos/pv", captured["grouped"])
+        self.assertTrue(result.completed)
+        self.assertIsNone(result.error)
+
+    def test_driver_closed_when_download_disabled(self) -> None:
+        adapter = FakeAdapter([make_items(1)])
+        pipeline = make_pipeline(adapter, download_enabled=False)
+
+        run(pipeline.run())
+
+        drivers = pipeline._created_drivers  # type: ignore[attr-defined]
+        self.assertTrue(drivers)
+        self.assertTrue(all(driver.closed for driver in drivers))
 
 
 if __name__ == "__main__":
