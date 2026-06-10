@@ -203,7 +203,17 @@ class HonkaiStarRailCnAdapter(SourceAdapter):
 
             new_count = await page.locator(NEWS_ITEM_SELECTOR).count()
             new_items_loaded = new_count > prev_count
-            prev_count = new_count
             elapsed = asyncio.get_event_loop().time() - start
+            # One progress line per click so a long fetch (hundreds of clicks
+            # over several minutes) never looks stuck to the user.
+            logger.info(
+                "'load more' click %d/%d: +%d item(s) (total %d, %.1fs elapsed)",
+                interactions,
+                self.max_interactions,
+                new_count - prev_count,
+                new_count,
+                elapsed,
+            )
+            prev_count = new_count
 
         logger.info("Performed %d 'load more' interactions", interactions)

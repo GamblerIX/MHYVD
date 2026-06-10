@@ -193,6 +193,18 @@ class FetchNewsTests(unittest.TestCase):
         self.assertEqual(page.clicks, 0)
         self.assertEqual(len(items), 2)
 
+    def test_each_load_more_click_is_logged(self) -> None:
+        # Every click must emit its own progress line so a long fetch doesn't
+        # look stuck; 2 initial, +2 per click, total 7 -> 3 clicks.
+        page = FakePage(total=7, initial=2, per_click=2)
+        adapter = self._adapter()
+        with self.assertLogs("sources.honkai_star_rail_cn", level="INFO") as captured:
+            run(adapter.fetch_news(FakeDriver(page)))
+        click_lines = [m for m in captured.output if "'load more' click" in m]
+        self.assertEqual(len(click_lines), page.clicks)
+        self.assertIn("click 1/", click_lines[0])
+        self.assertIn("total 7", click_lines[-1])
+
     def test_no_button_skips_load_more(self) -> None:
         page = FakePage(total=5, initial=3, per_click=2, has_button=False)
         adapter = self._adapter()
