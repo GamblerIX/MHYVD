@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          # Distinct suffix per job so parallel jobs don't race on one cache key.
+          cache-suffix: lint
+      - run: uv sync --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-suffix: typecheck
+      - run: uv sync --dev
+      - run: uv run mypy src tests
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-suffix: test
+      - run: uv sync --dev
+      - run: uv run playwright install --with-deps chromium
+      # Root suite: the smoke test is collected here too but stays skipped
+      # (RUN_BROWSER_SMOKE unset), so it runs exactly once — in the step below.
+      - run: uv run python -m unittest discover -s tests
+      - run: uv run python -m unittest discover -s tests/integration
+        env:
+          RUN_BROWSER_SMOKE: "1"
+      # Headed smoke needs a virtual display on the headless runner.
+      - run: sudo apt-get update && sudo apt-get install -y xvfb
+      - run: xvfb-run -a uv run python -m unittest discover -s tests/integration
+        env:
+          RUN_BROWSER_SMOKE_HEADED: "1"

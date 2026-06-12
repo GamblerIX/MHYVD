@@ -1,0 +1,124 @@
+# CLAUDE.md
+
+Guidance for Claude Code when working in this repository.
+
+## What this is
+
+MHYVD scrapes a miHoYo/HoYoverse game news listing in a stealth Chromium
+browser, classifies articles by keyword rules, and downloads the videos behind
+`videos/*` articles. The pipeline is **Fetch → Classify → Download** with a
+headless→headed fallback, a fetch-stage time budget, interrupt handling, and
+resume mode. The browser defaults to **headed** mode; pass `--headless` for
+CI/servers.
+
+## Layout
+
+- `src/main.py` — CLI (`run`, `list-sources`) and `main(argv) -> int`. The
+  single wiring point: loads config, sets up logging, builds adapter/classifier/
+  downloader from registries, drives the pipeline under a time budget.
+- `src/pipeline/pipeline.py` — orchestrates the three stages + fallback. Returns
+  a `PipelineResult`; reports failures via its `error` field, never by raising.
+- `src/sources/` — `SourceAdapter`s (HSR-CN in `honkai_star_rail_cn.py`;
+  `release_list.py` replays the published `url-list.json` for
+  `run --from-release`), registry, and pure helpers in `base.py`.
+- `src/classifier/` — rule-based keyword classifier + registry.
+- `src/downloader/` — Playwright downloader (`videos/*` only), URL resolution,
+  output paths, registry.
+- `src/uploader/` — `upload-webdav` / `upload-gdrive` subcommands' backends:
+  WebDAV (stdlib urllib, `request_fn` seam) and Google Drive (OAuth, lazy
+  google imports, `client_factory` seam; deps in the optional `gdrive` extra).
+  Scans `output_dir`, skips remote files with the same name and size.
+  Credentials come from the `upload:` config section with `MHYVD_*` env-var
+  overrides (`Config.upload_config`). `run --upload {webdav,gdrive}` streams
+  instead: each successful download is uploaded and the local copy deleted
+  (`streaming.make_post_download_hook`, wired into the downloader's
+  `post_download` seam) so disk usage stays at roughly one video. Streaming
+  mode also probes the remote via the uploader's `exists(relative)` (the
+  downloader's `remote_exists` seam) before resolving/downloading; a remote
+  hit yields `skipped`, probe errors fall through to a normal download.
+- `src/browser/driver.py` — Playwright + stealth Chromium driver.
+- `src/config/` — YAML loader (`settings.py`), defaults, proxy.
+- `src/cache/` — `FetchCache` / `DownloadCache` for resume mode.
+- `src/runtime.py` — time budget, shutdown controller, `choose_exit_code`.
+- `src/models.py` — frozen dataclasses (`NewsItem`, `VideoItem`,
+  `DownloadResult`, `PipelineResult`, `Rule`, `SourceMetadata`).
+- `config/default.yaml` — mirrors `src/config/defaults.py`. Keep both in sync.
+- `tests/` — `unittest`, one file per module.
+- `tests/integration/` — opt-in tests that touch a real browser; run only when
+  `RUN_BROWSER_SMOKE=1` is set. Collected by the root discover but skipped
+  without that variable.
+- `.github/workflows/ci.yml` — CI: ruff lint+format, mypy, unittest, plus
+  headless and headed (`xvfb-run`, `RUN_BROWSER_SMOKE_HEADED=1`) Chromium smoke
+  tests, on push to `main` and every PR (Python 3.11).
+- `.github/workflows/scrape-list.yml` — daily scheduled scrape: runs
+  `run --list-only --headless` (full scrape can take ~30+ min; uses
+  `--timeout 3000`) and
+  publishes
+  `url-list.json` to the rolling `url-list` GitHub release via `gh`.
+
+## Commands
+
+Dependencies are managed with **uv** (Python pinned to **3.11** via
+`.python-version`). Run `uv sync` once to create `.venv`; prefix commands with
+`uv run`.
+
+```bash
+uv sync                                        # create .venv + install deps
+uv run python -m src.main run                  # full pipeline
+uv run python -m src.main list-sources         # list Source_Keys
+uv run python -m unittest discover -s tests    # run tests
+uv run ruff check . && uv run ruff format --check .   # lint + format gate
+uv run mypy src tests                          # type check
+RUN_BROWSER_SMOKE=1 uv run python -m unittest discover -s tests/integration  # Chromium smoke
+```
+
+`exp/` is reference-only and excluded from the ruff/mypy gate.
+
+The package is imported as `src` — run everything from the repo root. Runtime
+deps (`PyYAML`, `playwright`, `playwright-stealth`) and the `hypothesis` dev
+dependency live in `pyproject.toml`; keep that the single source of truth.
+
+## Conventions
+
+- **Frozen dataclasses.** All models in `src/models.py` are `frozen=True`.
+  Produce new instances (e.g. `NewsItem.with_category`) instead of mutating.
+- **Injectable seams for testing.** Browser/network touchpoints are behind
+  injectable callables: `pipeline_factory` (main), `driver_factory` /
+  `crash_identifier` (Pipeline), `resolve_attempt` / `download_file` /
+  `remote_exists` (downloader), `playwright_factory` / `stealth` (driver). New browser/network
+  code MUST stay behind such a seam so tests run without Chromium.
+- **Registries.** Adapters, classifiers, downloaders are registry-backed. Add a
+  component by registering it, not by editing the orchestrator.
+- **Failures are reported, not raised.** The pipeline normalizes errors into
+  `PipelineResult.error`. Preserve this — callers depend on it for exit codes.
+- **Lazy Playwright import.** `browser/driver.py` imports Playwright only on
+  launch, so the module imports cleanly without the package. Keep it lazy.
+- **Requirement tags.** Docstrings reference numbered requirements/properties
+  (e.g. "Requirement 4.2", "Property 10"). When changing behavior near a tag,
+  keep the tag accurate or update it.
+
+## Gotchas
+
+- The `--timeout` budget bounds **only the fetch (listing) stage** — enforced
+  inside `Pipeline.run` via `fetch_budget`; classify/download time is never
+  counted. A fetch timeout surfaces as `PipelineResult.timed_out=True`
+  (`completed=False`), which the CLI maps to exit `124`.
+- Exit-code precedence: timeout `124` > interrupt `130` > runtime failure `1` >
+  success `0` (`src/runtime.py::choose_exit_code`).
+- The markdown summary prints **only** when `PipelineResult.completed` is true —
+  never on timeout/interrupt. Gated on completion, not exit code.
+- A fetch attempt reporting **zero items** counts as a *failure* (triggers
+  fallback), not an empty success.
+- Downstream stages gate on the **reported** fetch count, not `len()` of the
+  actual list (`should_run_downstream`).
+- `--limit` is applied before recording to the Fetch_Cache so capped-out items
+  stay available on a later resume run.
+- Only `videos/*` categories are downloaded; other categories are classified
+  and counted but skipped by the downloader.
+- Unknown subcommand exits non-zero; every other argparse error exits **zero**
+  (intentional, in `_CliParser`).
+
+## Don't
+
+- Don't add real browser/network calls outside an injectable seam.
+- Don't let `config/default.yaml` and `src/config/defaults.py` drift apart.

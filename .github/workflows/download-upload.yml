@@ -1,0 +1,87 @@
+name: Download & Upload Videos
+
+# Replays the url-list.json published on the rolling `url-list` release
+# (`run --from-release`, no browser scrape of the listing) and streams each
+# video to the backend chosen at dispatch time: download one, upload one,
+# delete the local copy, then move on (`--upload`). Local disk usage stays
+# bounded to roughly one video at a time.
+#
+# Required repository secrets:
+#   WebDAV backend:
+#     MHYVD_WEBDAV_URL       — base URL of the WebDAV server
+#     MHYVD_WEBDAV_USERNAME  — WebDAV username
+#     MHYVD_WEBDAV_PASSWORD  — WebDAV password
+#   Google Drive backend:
+#     MHYVD_GDRIVE_TOKEN_JSON — contents of a pre-authorized OAuth token file
+#       (run `upload-gdrive` once locally to complete the OAuth flow, then
+#       copy ~/.config/mhyvd/gdrive-token.json into this secret; it must
+#       contain a refresh_token).
+
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: "Upload target"
+        type: choice
+        required: true
+        options:
+          - webdav
+          - gdrive
+      limit:
+        description: "Max videos to process (empty = all)"
+        type: string
+        required: false
+        default: ""
+
+concurrency:
+  group: download-upload
+  cancel-in-progress: false
+
+jobs:
+  download-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-suffix: download-upload
+      - run: uv sync --no-dev --extra gdrive
+      - run: uv run playwright install --with-deps chromium
+
+      - name: Prepare Google Drive token
+        if: inputs.backend == 'gdrive'
+        env:
+          MHYVD_GDRIVE_TOKEN_JSON: ${{ secrets.MHYVD_GDRIVE_TOKEN_JSON }}
+        run: |
+          if [ -z "$MHYVD_GDRIVE_TOKEN_JSON" ]; then
+            echo "::error::secret MHYVD_GDRIVE_TOKEN_JSON is not set" >&2
+            exit 1
+          fi
+          token_path="$RUNNER_TEMP/gdrive-token.json"
+          printf '%s' "$MHYVD_GDRIVE_TOKEN_JSON" > "$token_path"
+          echo "MHYVD_GDRIVE_TOKEN_PATH=$token_path" >> "$GITHUB_ENV"
+
+      - name: Download and stream-upload videos
+        # --from-release skips the listing scrape and replays the published
+        # url-list.json; the browser is still needed to resolve and download
+        # the video files. --upload streams each finished download to the
+        # chosen backend and removes the local copy.
+        env:
+          MHYVD_WEBDAV_URL: ${{ secrets.MHYVD_WEBDAV_URL }}
+          MHYVD_WEBDAV_USERNAME: ${{ secrets.MHYVD_WEBDAV_USERNAME }}
+          MHYVD_WEBDAV_PASSWORD: ${{ secrets.MHYVD_WEBDAV_PASSWORD }}
+        run: >
+          uv run python -m src.main run --from-release --headless
+          --timeout 3000 --log-file run.log
+          --upload ${{ inputs.backend }}
+          ${{ inputs.limit != '' && format('--limit {0}', inputs.limit) || '' }}
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: run-logs
+          path: run.log
+          if-no-files-found: ignore

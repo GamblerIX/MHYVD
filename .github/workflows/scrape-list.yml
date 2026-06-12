@@ -1,0 +1,65 @@
+name: Scrape URL List
+
+# Fetches and classifies the news listing without downloading any videos
+# (`run --list-only`), then publishes the exported URL list to the rolling
+# `url-list` release so consumers always download the same stable asset URL.
+
+on:
+  schedule:
+    - cron: "0 1 * * *" # daily, 01:00 UTC (09:00 Beijing)
+  workflow_dispatch:
+
+concurrency:
+  group: scrape-url-list
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          cache-suffix: scrape
+      - run: uv sync --no-dev
+      - run: uv run playwright install --with-deps chromium
+
+      - name: Scrape URL list (no downloads)
+        # A full listing scrape (up to 1000 'load more' clicks at ~2s each)
+        # needs upwards of half an hour; give the time budget comfortable
+        # headroom so slow CI networking doesn't hit 124.
+        # --headless: the default browser mode is headed, which cannot run on a
+        # display-less CI runner.
+        run: >
+          uv run python -m src.main run --list-only --headless
+          --timeout 3000 --log-file scrape.log
+
+      - name: Publish list to rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp downloads/cache.json url-list.json
+          stamp="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          if ! gh release view url-list --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create url-list \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "URL List" \
+              --notes "Auto-updated by the scrape-list workflow." \
+              --latest=false
+          fi
+          gh release upload url-list url-list.json --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit url-list \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes "Last updated: ${stamp} (run ${GITHUB_RUN_ID})."
+
+      - name: Upload scrape log on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scrape-log
+          path: scrape.log
+          if-no-files-found: ignore
